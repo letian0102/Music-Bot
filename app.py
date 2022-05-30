@@ -41,12 +41,20 @@ ffmpeg_options = {
     'options': '-vn'
 }
 
+
+
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 
-q = {} #歌曲文件名
-qn = {} #歌曲名字
-# for guild in bot.guilds:
-#     q[guild.id] = []
+botDictionary = {}
+
+
+@bot.event
+async def on_ready():
+    for guild in bot.guilds:
+        botDictionary[guild] = {"q":[],"qn":[],"r_s":False,"curr":"","currS":"","time":0}
+    #print("Dictionary printed:"+str(botDictionary))
+
+
 
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
@@ -68,6 +76,17 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
 time = 0
 
+@bot.command(name='单曲循环', help='播放歌曲', aliases=['repeat_single'])
+async def repeat_single(ctx, url):
+    server = ctx.message.guild
+    botDictionary[server]["r_s"] = False
+    if url in ["1","开","True","T"]:
+        botDictionary[server]["r_s"] = True
+        return await ctx.send("**单曲循环已开**")
+    else:
+        botDictionary[server]["r_s"] = False
+        return await ctx.send("**单曲循环已关**")
+
 @bot.event
 async def check_queue(ctx):
     server = ctx.message.guild
@@ -78,12 +97,15 @@ async def check_queue(ctx):
     voice_client.stop()
 
     global time
-    if len(q[server]) > 0:
-        #print("放下首歌")
-        await play_song(ctx, q[server].pop(0))
-        return await ctx.send("**正在播放：**"+qn[server].pop(0))
-        #print("放了下首歌")
-    elif len(voice_members) < 1 or len(q[server]) == 0:
+    if botDictionary[server]["r_s"] == True and botDictionary[server]["curr"] != "": #单曲循环开+无单曲循环的歌
+        await play_song(ctx, botDictionary[server]["curr"])
+        return await ctx.send("**单曲循环：**"+ botDictionary[server]["currS"])
+    elif len(botDictionary[server]["q"]) > 0: #单曲循环没开
+        botDictionary[server]["curr"] = botDictionary[server]["q"].pop(0)
+        botDictionary[server]["currS"] = botDictionary[server]["qn"].pop(0)
+        await play_song(ctx, botDictionary[server]["curr"])
+        return await ctx.send("**正在播放：**"+botDictionary[server]["currS"])
+    elif len(voice_members) < 1 or len(botDictionary[server]["q"]) == 0: #inactivity check
         while True:
             await asyncio.sleep(1)
             time += 1
@@ -95,7 +117,7 @@ async def check_queue(ctx):
                 print("退出")
                 time = 0
                 await ctx.send("频道无人/歌单为空超时五分钟，自动退出。")
-                return await ctx.voice_client.disconnect()
+                return await ctx.leave(ctx)
 
 #播放歌曲
 @bot.command(name='播放', help='播放歌曲', aliases=['p','play'])
@@ -122,13 +144,10 @@ async def play(ctx,*,url):
             #title = YTDLSource.title
             #print(title)
             #print(voice_client.is_playing())
-            if filename in q:
+            if filename in botDictionary[server]["q"]:
                 return await ctx.send('**Queue内已含: ** {}'.format(url))
-            if server not in q.keys() or server not in qn.keys():
-                q[server] = []
-                qn[server] = []
-            q[server].append(filename)
-            qn[server].append(url)
+            botDictionary[server]["q"].append(filename)
+            botDictionary[server]["qn"].append(url)
 
             if voice_client.is_playing(): #playing a song
 
@@ -137,6 +156,7 @@ async def play(ctx,*,url):
             await check_queue(ctx)
             #print("played")
     except:
+        
         await ctx.send("无法播放。")
 
 async def play_song(ctx, filename):
@@ -181,9 +201,9 @@ async def resume(ctx):
 async def stop(ctx):
     voice_client = ctx.message.guild.voice_client
     server = ctx.message.guild
-    if q[server] or qn[server]:
-        q[server].clear()
-        qn[server].clear()
+    if botDictionary[server]["q"] or botDictionary[server]["qn"]:
+        botDictionary[server]["q"].clear()
+        botDictionary[server]["qn"].clear()
     if voice_client.is_playing():
         voice_client.stop()
     else:
@@ -203,7 +223,13 @@ async def join(ctx):
 @bot.command(name='离开', help='让Bot离开频道', aliases=['leave'])
 async def leave(ctx):
     voice_client = ctx.message.guild.voice_client
+    server = ctx.message.guild
     if voice_client.is_connected():
+        botDictionary[server]["q"].clear()
+        botDictionary[server]["qn"].clear()
+        botDictionary[server]["r_s"] = False
+        botDictionary[server]["curr"] = ""
+        botDictionary[server]["currS"] = ""
         await voice_client.disconnect()
     else:
         await ctx.send("Bot并未在一个频道内，无法离开。")
@@ -220,10 +246,10 @@ async def roll(ctx,url):
 @bot.command(name="列表", help="显示当前歌单", aliases=['list'])
 async def queue(ctx):
     server = ctx.message.guild
-    if qn[server] and len(qn[server]) > 0:
+    if botDictionary[server]["qn"] and len(botDictionary[server]["qn"]) > 0:
         string = "```"
-        for i in range(len(qn[server])):
-            string += str(i)+"："+qn[server][i]+"\n"
+        for i in range(len(botDictionary[server]["qn"])):
+            string += str(i)+"："+botDictionary[server]["qn"][i]+"\n"
         string += "```"
         await ctx.send(string)
     else:
@@ -232,14 +258,14 @@ async def queue(ctx):
 #帮助
 @bot.command(name="help", help="roll点数")
 async def help(ctx):
-    await ctx.send("```"+"~播放 歌曲名：播放下一首歌曲\n"+
+    await ctx.send("```"+"~播放 [歌曲名]：播放下一首歌曲\n"+
     "~进入：进入你的房间\n"+
     "~离开：离开你的房间\n"+
     "~暂停：暂停当前歌曲\n"+
     "~继续：继续播放当前歌曲\n"+
     "~跳过：跳过当前歌曲\n"+
-    "~roll 数字：roll一个随机数字\n"+
-    "~8ball 问题：问Magic 8 Ball一个神奇的问题！"
+    "~roll [数字]：roll一个随机数字\n"+
+    "~8ball [问题]：问Magic 8 Ball一个神奇的问题！"
     "```")
 
 #magic 8ball
