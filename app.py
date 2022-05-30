@@ -74,8 +74,6 @@ class YTDLSource(discord.PCMVolumeTransformer):
         filename = data['title'] if stream else ytdl.prepare_filename(data)
         return filename
 
-time = 0
-
 @bot.command(name='单曲循环', help='播放歌曲', aliases=['repeat_single'])
 async def repeat_single(ctx, url):
     server = ctx.message.guild
@@ -96,7 +94,6 @@ async def check_queue(ctx):
     voice_client = ctx.message.guild.voice_client
     voice_client.stop()
 
-    global time
     if botDictionary[server]["r_s"] == True and botDictionary[server]["curr"] != "": #单曲循环开+无单曲循环的歌
         await play_song(ctx, botDictionary[server]["curr"])
         return await ctx.send("**单曲循环：**"+ botDictionary[server]["currS"])
@@ -108,16 +105,16 @@ async def check_queue(ctx):
     elif len(voice_members) < 1 or len(botDictionary[server]["q"]) == 0: #inactivity check
         while True:
             await asyncio.sleep(1)
-            time += 1
+            botDictionary[server]["time"] += 1
             if voice_client.is_playing() and not voice_client.is_paused():
                 print("正在播放中")
-                time = 0
+                botDictionary[server]["time"] = 0
                 break
-            elif time == 300 and voice_client.is_connected():
+            elif botDictionary[server]["time"] == 300 and voice_client.is_connected():
                 print("退出")
-                time = 0
+                botDictionary[server]["time"] = 0
                 await ctx.send("频道无人/歌单为空超时五分钟，自动退出。")
-                return await ctx.leave(ctx)
+                return await leave(ctx)
 
 #播放歌曲
 @bot.command(name='播放', help='播放歌曲', aliases=['p','play'])
@@ -259,13 +256,14 @@ async def queue(ctx):
 @bot.command(name="help", help="roll点数")
 async def help(ctx):
     await ctx.send("```"+"~播放 [歌曲名]：播放下一首歌曲\n"+
-    "~进入：进入你的房间\n"+
-    "~离开：离开你的房间\n"+
-    "~暂停：暂停当前歌曲\n"+
-    "~继续：继续播放当前歌曲\n"+
-    "~跳过：跳过当前歌曲\n"+
+    "~进入/join：进入你的房间\n"+
+    "~离开/leave：离开你的房间\n"+
+    "~暂停/pause：暂停当前歌曲\n"+
+    "~继续/resume：继续播放当前歌曲\n"+
+    "~跳过/skip：跳过当前歌曲\n"+
     "~roll [数字]：roll一个随机数字\n"+
-    "~8ball [问题]：问Magic 8 Ball一个神奇的问题！"
+    "~8ball [问题]：问Magic 8 Ball一个神奇的问题！"+
+    "~单曲循环/repeat_single [1/0]: 是否单曲循环当前播放歌曲"+
     "```")
 
 #magic 8ball
