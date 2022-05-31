@@ -51,7 +51,7 @@ botDictionary = {}
 @bot.event
 async def on_ready():
     for guild in bot.guilds:
-        botDictionary[guild] = {"q":[],"qn":[],"r_s":False,"curr":"","currS":"","time":0}
+        botDictionary[guild] = {"q":[],"qn":[],"r_s":False,"curr":"","currS":"","time":0,"r_l":False}
     #print("Dictionary printed:"+str(botDictionary))
 
 
@@ -73,6 +73,17 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = data['entries'][0]
         filename = data['title'] if stream else ytdl.prepare_filename(data)
         return filename
+
+@bot.command(name='列表循环', help='播放歌曲', aliases=['repeat_list'])
+async def repeat(ctx, url):
+    server = ctx.message.guild
+    botDictionary[server]["r_l"] = False
+    if url in ["1","开","True","T"]:
+        botDictionary[server]["r_l"] = True
+        return await ctx.send("**列表循环已开**")
+    else:
+        botDictionary[server]["r_s"] = False
+        return await ctx.send("**列表循环已关**")
 
 @bot.command(name='单曲循环', help='播放歌曲', aliases=['repeat_single'])
 async def repeat_single(ctx, url):
@@ -100,6 +111,9 @@ async def check_queue(ctx):
     elif len(botDictionary[server]["q"]) > 0: #单曲循环没开
         botDictionary[server]["curr"] = botDictionary[server]["q"].pop(0)
         botDictionary[server]["currS"] = botDictionary[server]["qn"].pop(0)
+        if botDictionary[server]["r_l"] == True:
+            botDictionary[server]["q"].append(botDictionary[server]["curr"])
+            botDictionary[server]["qn"].append(botDictionary[server]["currS"])
         await play_song(ctx, botDictionary[server]["curr"])
         return await ctx.send("**正在播放：**"+botDictionary[server]["currS"])
     elif len(voice_members) < 1 or len(botDictionary[server]["q"]) == 0: #inactivity check
@@ -193,6 +207,19 @@ async def resume(ctx):
     else:
         await ctx.send("Bot并未在播放任何的歌，请用“~播放”指令。")
 
+@bot.command(name='删除', help='删除歌曲', aliases=['remove'])
+async def remove(ctx, url):
+    server = ctx.message.guild
+    if url.isdigit() and int(url) < len(botDictionary[server]["q"]) and int(url) >= 0:
+        del botDictionary[server]["q"][int(url)]
+        temp = botDictionary[server]["qn"][int(url)]
+        del botDictionary[server]["qn"][int(url)]
+        await ctx.send("**已删除 **"+temp)
+    elif len(botDictionary[server]["q"]) == 0:
+        await ctx.send("歌单为空，请添加歌曲再删除。")
+    else:
+        await ctx.send("请输入正确的歌曲位置，详情请输入~list查看。")
+
 #停止播放
 @bot.command(name='停止', help='停止播放', aliases=['stop'])
 async def stop(ctx):
@@ -262,8 +289,10 @@ async def help(ctx):
     "~继续/resume：继续播放当前歌曲\n"+
     "~跳过/skip：跳过当前歌曲\n"+
     "~roll [数字]：roll一个随机数字\n"+
-    "~8ball [问题]：问Magic 8 Ball一个神奇的问题！"+
-    "~单曲循环/repeat_single [1/0]: 是否单曲循环当前播放歌曲"+
+    "~8ball [问题]：问Magic 8 Ball一个神奇的问题\n"+
+    "~单曲循环/repeat_single [1/0]: 是否单曲循环当前播放歌曲\n"+
+    "~列表循环/repeat_list [1/0]：是否列表循环\n"+
+    "~删除/remove [位置]：删除在此位置的歌曲"+
     "```")
 
 #magic 8ball
